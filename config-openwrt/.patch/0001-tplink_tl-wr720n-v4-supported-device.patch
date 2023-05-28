@@ -1,0 +1,130 @@
+From e0ab56889e6317645dffebcf51c6358c84ad1735 Mon Sep 17 00:00:00 2001
+From: Nigel Chan <signigelchan@163.com>
+Date: Wed, 24 May 2023 14:01:42 +0000
+Subject: [PATCH] add: 'tplink_tl-wr720n-v4' supported device.
+
+---
+ .../dts/ar9331_tplink_tl-wr710n-16m.dtsi      | 71 +++++++++++++++++++
+ .../ath79/dts/ar9331_tplink_tl-wr720n-v4.dts  |  8 +++
+ target/linux/ath79/image/generic-tp-link.mk   | 12 ++++
+ 3 files changed, 91 insertions(+)
+ create mode 100644 target/linux/ath79/dts/ar9331_tplink_tl-wr710n-16m.dtsi
+ create mode 100644 target/linux/ath79/dts/ar9331_tplink_tl-wr720n-v4.dts
+
+diff --git a/target/linux/ath79/dts/ar9331_tplink_tl-wr710n-16m.dtsi b/target/linux/ath79/dts/ar9331_tplink_tl-wr710n-16m.dtsi
+new file mode 100644
+index 0000000000..c02ab6c243
+--- /dev/null
++++ b/target/linux/ath79/dts/ar9331_tplink_tl-wr710n-16m.dtsi
+@@ -0,0 +1,71 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "ar9331_tplink_tl-wr710n.dtsi"
++
++/ {
++	aliases {
++		label-mac-device = &eth0;
++	};
++};
++
++&spi {
++	status = "okay";
++
++	flash@0 {
++		compatible = "jedec,spi-nor";
++		reg = <0>;
++		spi-max-frequency = <25000000>;
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			uboot: partition@0 {
++				reg = <0x000000 0x020000>;
++				label = "u-boot";
++				read-only;
++			};
++
++			partition@20000 {
++				compatible = "tplink,firmware";
++				reg = <0x020000 0xfd0000>;
++				label = "firmware";
++			};
++
++			art: partition@ff0000 {
++				reg = <0xff0000 0x010000>;
++				label = "art";
++				read-only;
++			};
++		};
++	};
++};
++
++&eth0 {
++	nvmem-cells = <&macaddr_uboot_1fc00>;
++	nvmem-cell-names = "mac-address";
++};
++
++&eth1 {
++	nvmem-cells = <&macaddr_uboot_1fc00>;
++	nvmem-cell-names = "mac-address";
++	mac-address-increment = <(-1)>;
++};
++
++&wmac {
++	mtd-cal-data = <&art 0x1000>;
++
++	nvmem-cells = <&macaddr_uboot_1fc00>;
++	nvmem-cell-names = "mac-address";
++};
++
++&uboot {
++	compatible = "nvmem-cells";
++	#address-cells = <1>;
++	#size-cells = <1>;
++
++	macaddr_uboot_1fc00: macaddr@1fc00 {
++		reg = <0x1fc00 0x6>;
++	};
++};
+diff --git a/target/linux/ath79/dts/ar9331_tplink_tl-wr720n-v4.dts b/target/linux/ath79/dts/ar9331_tplink_tl-wr720n-v4.dts
+new file mode 100644
+index 0000000000..485b5f889a
+--- /dev/null
++++ b/target/linux/ath79/dts/ar9331_tplink_tl-wr720n-v4.dts
+@@ -0,0 +1,8 @@
++// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
++
++#include "ar9331_tplink_tl-wr710n-16m.dtsi"
++
++/ {
++	model = "TP-Link TL-WR720N v4";
++	compatible = "tplink,tl-wr720n-v4", "qca,ar9331";
++};
+diff --git a/target/linux/ath79/image/generic-tp-link.mk b/target/linux/ath79/image/generic-tp-link.mk
+index fed572c884..ee4074623a 100644
+--- a/target/linux/ath79/image/generic-tp-link.mk
++++ b/target/linux/ath79/image/generic-tp-link.mk
+@@ -757,6 +757,18 @@ define Device/tplink_tl-wr710n-v2.1
+ endef
+ TARGET_DEVICES += tplink_tl-wr710n-v2.1
+ 
++define Device/tplink_tl-wr720n-v4
++  $(Device/tplink-16mlzma)
++  SOC := ar9331
++  DEVICE_MODEL := TL-WR720N
++  DEVICE_VARIANT := v4
++  DEVICE_PACKAGES := kmod-usb-chipidea2 kmod-usb-ledtrig-usbport
++  TPLINK_HWID := 0x07200104
++  TPLINK_HWREV := 0x4
++  SUPPORTED_DEVICES += tl-wr720n
++endef
++TARGET_DEVICES += tplink_tl-wr720n-v4
++
+ define Device/tplink_tl-wr810n-v1
+   $(Device/tplink-8mlzma)
+   SOC := qca9531
+-- 
+2.40.1
+
