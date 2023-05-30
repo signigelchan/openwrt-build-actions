@@ -1,0 +1,223 @@
+#
+#=====================================================================================
+# https://github.com/signigelchan/openwrt-build-actions
+#
+# Description: Build OpenWrt Firmware
+#
+# Source code repository: https://github.com/openwrt/openwrt / Branch: openwrt-22.03
+#                         https://github.com/immortalwrt/immortalwrt / Branch: openwrt-21.02
+#                         https://github.com/coolsnowwolf/lede / Branch: master
+#=====================================================================================
+#
+name: OpenWrt Build Action
+
+on:
+#  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      openwrt_device:
+        description: "Choice device type"
+        required: false
+        default: "tplink_tl-wr720n-v4"
+        type: choice
+        options:
+          - tplink_tl-wr720n-v4
+          - d-team_newifi-d2
+          - armvirt-64
+      openwrt_repo:
+        description: "Set openwrt repo"
+        required: false
+        default: "signigelchan/openwrt"
+      openwrt_branch:
+        description: "Set repo branch"
+        required: false
+        default: "owrt-v22.03.5"
+      packit_armvirt:
+        description: "armvirt firmware to packit ?"
+        required: true
+        default: false
+        type: boolean
+      packit_soc:
+        description: "Set the packit device board"
+        required: true
+        default: "s905d"
+      packit_kernel_version:
+        description: "Set the packit ophub/kernel version"
+        required: true
+        default: "5.10.176"
+      packit_kernel_auto_latest:
+        description: "Set whether to use latest kernel"
+        required: false
+        default: false
+        type: boolean
+      packit_sw_flow_offload:
+        description: "Choice whether to enable SW_FLOWOFFLOAD"
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '0'
+          - '1'
+      packit_hw_flow_offload:
+        description: "Choice whether to enable HW_FLOWOFFLOAD"
+        required: false
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
+      packit_sfe_flow:
+        description: "Choice whether to enable SFE_FLOW"
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '0'
+          - '1'
+
+env:
+  REPO_URL: ${{ inputs.openwrt_repo }}
+  REPO_BRANCH: ${{ inputs.openwrt_branch }}
+  CONFIG_FILE: ${{ inputs.openwrt_device }}
+  FEEDS_CONF: feeds.conf.default
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  ARMVIRT_PACKIT: ${{ inputs.packit_armvirt }}
+  ARMVIRT_SW_FLOWOFFLOAD: ${{ inputs.packit_sw_flow_offload }}
+  ARMVIRT_HW_FLOWOFFLOAD: ${{ inputs.packit_hw_flow_offload }}
+  ARMVIRT_SFE_FLOW: ${{ inputs.packit_sfe_flow }}
+  TZ: America/New_York
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rdf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt -qq update
+        sudo -E apt -qq install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+          gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
+          file wget
+        sudo -E apt -qq install $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt)
+        sudo -E systemctl daemon-reload
+        sudo -E apt -qq autoremove --purge
+        sudo -E apt -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone https://github.com/$REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Load custom feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: Update feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds install -a
+
+    - name: Load custom configuration
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e "openwrt/device-buildinfo/${CONFIG_FILE}.config" ] && mv openwrt/device-buildinfo/${CONFIG_FILE}.config openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: Download package
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        echo -e "download thread count: $(nproc)"
+        make download -j$(nproc)
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "compile thread count: $(nproc)"
+        make -j $(($(nproc)+1)) || make -j1 || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Check space usage
+      if: (!cancelled())
+      run: df -hT
+
+    - name: Upload bin directory
+      uses: actions/upload-artifact@v3
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true' && !cancelled()
+      with:
+        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: openwrt/bin
+
+    - name: Organize files
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v3
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Armvirt firmware packit
+      uses: signigelchan/openwrt-packit-actions@main
+      if: env.ARMVIRT_PACKIT == 'true' && steps.compile.outputs.status == 'success' && !cancelled()
+      env:
+        OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*.tar.gz
+        KERNEL_REPO_URL: "ophub/kernel"
+        KERNEL_VERSION_NAME: ${{ inputs.packit_kernel_version }}
+        KERNEL_AUTO_LATEST: ${{ inputs.packit_kernel_auto_latest }}
+        PACKAGE_SOC: ${{ inputs.packit_soc }}
+        GZIP_IMGS: .7z
+        WHOAMI: "chanworks"
+        OPENWRT_VER: "armvirt"
+        DISTRIB_REVISION: "OpenWrt"
+        SW_FLOWOFFLOAD: env.ARMVIRT_SW_FLOWOFFLOAD
+        HW_FLOWOFFLOAD: env.ARMVIRT_HW_FLOWOFFLOAD
+        SFE_FLOW: env.ARMVIRT_SFE_FLOW
+        ENABLE_WIFI_K504: 1
+        ENABLE_WIFI_K510: 1
+
+    - name: Upload packit armvirt firmware
+      uses: actions/upload-artifact@v3
+      if: env.ARMVIRT_PACKIT == 'true' && (!env.PACKAGED_STATUS || env.PACKAGED_STATUS == 'success') && !cancelled()
+      with:
+        name: OpenWrt_packit_armvirt${{ env.FILE_DATE }}
+        path: ${{ env.PACKAGED_OUTPUTPATH }}/*
+
