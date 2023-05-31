@@ -34,9 +34,9 @@ on:
           - immortalwrt/immortalwrt
           - coolsnowwolf/lede
       openwrt_branch:
-        description: "Set repo branch"
+        description: "Set repo branch (!! THE ONE OF BELOW)"
         required: true
-        default: "openwrt-21.02"
+        default: "openwrt-22.03;openwrt-21.02;master"
       packit_armvirt:
         description: "Armvirt firmware to packit ?"
         required: true
@@ -84,14 +84,14 @@ env:
   REPO_URL: https://github.com/${{ inputs.openwrt_repo }}
   REPO_BRANCH: ${{ inputs.openwrt_branch }}
   DEVICE_NAME: ${{ inputs.openwrt_device }}
-  CUSTOM_FILES: config-openwrt/.files/
-  PATCH_DIR: config-openwrt/.patch/
+  CUSTOM_FILES: config-openwrt/custom-files
+  CUSTOM_PATCHES: config-openwrt/custom-patches
   UPLOAD_ARTIFACTS: false
   UPLOAD_RELEASE: true
   ARMVIRT_PACKIT: ${{ inputs.packit_armvirt }}
   ARMVIRT_SOC: ${{ inputs.packit_soc }}
-  ARMVIRT_SW_FLOWOFFLOAD: ${{ inputs.packit_sw_flow }}
-  ARMVIRT_HW_FLOWOFFLOAD: ${{ inputs.packit_hw_flow }}
+  ARMVIRT_SW_FLOW: ${{ inputs.packit_sw_flow }}
+  ARMVIRT_HW_FLOW: ${{ inputs.packit_hw_flow }}
   ARMVIRT_SFE_FLOW: ${{ inputs.packit_sfe_flow }}
   UPLOAD_ARMVIRT_ARTIFACTS: false
   UPLOAD_ARMVIRT_RELEASE: true
@@ -100,7 +100,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
+    #if: ${{ github.event.repository.owner.id }} == ${{ github.event.sender.id }}
 
     steps:
     - name: Checkout
@@ -110,19 +110,19 @@ jobs:
       run: |
           CONFIG_NAME=$(echo "${{ inputs.openwrt_repo }}" | sed 's/.*\///')
           BUILD_INFO=config-openwrt/${CONFIG_NAME}/buildinfo/${{ inputs.openwrt_device }}.config
-          echo "BUILD_INFO=${BUILD_INFO}" >> ${GITHUB_ENV}
           FEEDS_CONF=config-openwrt/${CONFIG_NAME}/feeds.conf.default
-          echo "FEEDS_CONF=${FEEDS_CONF}" >> ${GITHUB_ENV}
           CUSTOM_PART1_FEEDS=config-openwrt/${CONFIG_NAME}/custom-part1-feeds.sh
-          echo "CUSTOM_PART1_FEEDS=${CUSTOM_PART1_FEEDS}" >> ${GITHUB_ENV}
           CUSTOM_PART2_CONF=config-openwrt/${CONFIG_NAME}/custom-part2-conf.sh
+          echo "BUILD_INFO=${BUILD_INFO}" >> ${GITHUB_ENV}
+          echo "FEEDS_CONF=${FEEDS_CONF}" >> ${GITHUB_ENV}
+          echo "CUSTOM_PART1_FEEDS=${CUSTOM_PART1_FEEDS}" >> ${GITHUB_ENV}
           echo "CUSTOM_PART2_CONF=${CUSTOM_PART2_CONF}" >> ${GITHUB_ENV}
           if [[ $CONFIG_NAME == "openwrt" ]]; then
             CONFIG_NAME="official"
           fi
           echo "CONFIG_NAME=${CONFIG_NAME}" >> ${GITHUB_ENV}
 
-    - name: Initialization compilation environment
+    - name: Initialization compile environment
       id: init
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -145,7 +145,7 @@ jobs:
 
     - name: Clone openwrt source code
       working-directory: /workdir
-      if: ${{ steps.init.outputs.status }} == 'success' && !cancelled()
+      if: steps.init.outputs.status == 'success' && !cancelled()
       run: |
         cat /etc/os-release
         free -m
@@ -153,60 +153,51 @@ jobs:
         git clone -q --single-branch --depth 1 ${REPO_URL} -b ${REPO_BRANCH} openwrt
         ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
 
-    - name: Patch supported device source code
-      if: env.DEVICE_NAME == 'tplink_tl-wr720n-v4' && env.PATCH_DIR != '' && !cancelled()
+    - name: Patch supported source code
+      if: env.DEVICE_NAME == 'tplink_tl-wr720n-v4' && env.CUSTOM_PATCHES != '' && !cancelled()
       run: |
-        mv "${PATCH_DIR}" openwrt/.patch-home
+        mv ${CUSTOM_PATCHES} openwrt/custom-patches
         cd openwrt/
-        echo -e "dest patch root-dir: $PWD"
+        echo -e "dest patch root-dir: ${PWD}"
         git config --global user.email "committer@github.com"
         git config --global user.name "github committer"
-        git apply --stat .patch-home/*.patch
-        git apply --check .patch-home/*.patch
-        git am .patch-home/*.patch
+        git apply --stat custom-patches/*.patch
+        git apply --check custom-patches/*.patch
+        git am custom-patches/*.patch
 
     - name: Load custom feeds
       run: |
-        if [[ -n "${FEEDS_CONF}" && -e "${FEEDS_CONF}" ]]; then
-          mv "${FEEDS_CONF}" openwrt/feeds.conf.default
-          sha256sum openwrt/feeds.conf.default
-        fi
+        [[ -e ${FEEDS_CONF} ]] && mv ${FEEDS_CONF} openwrt/feeds.conf.default
+        sha256sum openwrt/feeds.conf.default
 
-        if [[ -n "${CUSTOM_PART1_FEEDS}" && -e "${CUSTOM_PART1_FEEDS}" ]]; then
-          chmod +x "${CUSTOM_PART1_FEEDS}"
-          cd openwrt/
-          "${GITHUB_WORKSPACE}/${CUSTOM_PART1_FEEDS}"
-        fi
+        chmod +x ${CUSTOM_PART1_FEEDS}
+        cd openwrt/
+        ${GITHUB_WORKSPACE}/${CUSTOM_PART1_FEEDS}
 
     - name: Update feeds
       run: |
-        cd openwrt
+        cd openwrt/
         ./scripts/feeds update -a
 
     - name: Install feeds
       run: |
-        cd openwrt
+        cd openwrt/
         ./scripts/feeds install -a
 
     - name: Load custom configuration
       run: |
-        [[ -d "${CUSTOM_FILES}" ]] && mv "${CUSTOM_FILES}" openwrt/files
+        [[ -d ${CUSTOM_FILES} ]] && mv ${CUSTOM_FILES} openwrt/files
+        [[ -e ${BUILD_INFO} ]] && mv ${BUILD_INFO} openwrt/.config
+        sha256sum openwrt/.config
 
-        if [[ -n "${BUILD_INFO}" && -e "${BUILD_INFO}" ]]; then
-          mv "${BUILD_INFO}" openwrt/.config
-          sha256sum openwrt/.config
-        fi
-
-        if [[ -n "${CUSTOM_PART2_CONF}" && -e "${CUSTOM_PART2_CONF}" ]]; then
-          chmod +x "${CUSTOM_PART2_CONF}"
-          cd openwrt/
-          "${GITHUB_WORKSPACE}/${CUSTOM_PART2_CONF}"
-        fi
+        chmod +x ${CUSTOM_PART2_CONF}
+        cd openwrt/
+        ${GITHUB_WORKSPACE}/${CUSTOM_PART2_CONF}
 
     - name: Download packages
       id: package
       run: |
-        cd openwrt
+        cd openwrt/
         make defconfig
         echo -e "download thread count: $(nproc)"
         make download -j$(($(nproc)+1))
@@ -216,47 +207,64 @@ jobs:
     - name: Compile the firmware
       id: compile
       run: |
-        cd openwrt
+        cd openwrt/
         echo -e "compile thread count: $(nproc)"
         make -j$(($(nproc)+1)) || make -j1 || make -j1 V=s
         echo "status=success" >> ${GITHUB_OUTPUT}
 
     - name: Organize files
       id: organize
-      if: ${{ steps.compile.outputs.status }} == 'success' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         df -hT
         cd openwrt/bin/targets/*/*
+        ls -alh
         rm -rf packages
-        echo "BUILD_DATE=$(date + "%Y.%m.%d")" >> ${GITHUB_ENV}
-        echo "FIRMWARE_PATH=$PWD" >> ${GITHUB_ENV}
-        echo "build_tag=openWrt_${CONFIG_NAME}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
+        BUILT_PATH=${PWD}
+        BUILT_DATE=$(date +"%Y.%m.%d")
+        echo "BUILT_PATH=${BUILT_PATH}" >> ${GITHUB_ENV}
+        echo "BUILT_DATE=${BUILT_DATE}" >> ${GITHUB_ENV}
+
+        cd ${GITHUB_WORKSPACE}/openwrt/bin
+        7z a -r -t7z openwrt_${CONFIG_NAME}_${DEVICE_NAME}_${BUILT_DATE}.7z ${BUILT_PATH}/*
+        ls -alh
+        echo "PKGED_PATH=${PWD}" >> ${GITHUB_ENV}
+        echo "build_tag=OpenWrt_${CONFIG_NAME}_${BUILT_DATE}" >> ${GITHUB_OUTPUT}
         echo "status=success" >> ${GITHUB_OUTPUT}
 
     - name: Upload firmware to Actions
       uses: actions/upload-artifact@v3
-      if: ${{ steps.organize.outputs.status }} == 'success' && env.UPLOAD_ARTIFACTS == 'true' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_ARTIFACTS == 'true' && !cancelled()
       with:
-        name: openwrt_${{ env.CONFIG_NAME }}_${{ env.DEVICE_NAME }}_${{ env.BUILD_DATE }}
-        path: ${{ env.FIRMWARE_PATH }}
+        name: openwrt_${{ env.CONFIG_NAME }}_${{ env.DEVICE_NAME }}_${{ env.BUILT_DATE }}
+        path: ${{ env.PKGED_PATH }}/*.7z
 
     - name: Upload firmware to Releases
       uses: ncipollo/release-action@main
-      if: ${{ steps.organize.outputs.status }} == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         tag: ${{ steps.organize.outputs.build_tag }}
-        name: openwrt_${{ env.CONFIG_NAME }}_${{ env.DEVICE_NAME }}_${{ env.BUILD_DATE }}
-        artifacts: ${{ env.FIRMWARE_PATH }}
+        artifacts: ${{ env.PKGED_PATH }}/*.7z
         allowUpdates: true
         removeArtifacts: false
         replacesArtifacts: true
         token: ${{ secrets.GH_TOKEN }}
+        body: |
+          ### OpenWrt Source information
+          - Source code: ```${{ env.REPO_URL }}```
+          - Branch: ```${{ env.REPO_BRANCH }}```
+
+          ### OpenWrt Firmware infomation
+          - Default IP: ```192.168.1.1```
+          - Default username: ```root```
+          - Default password: ```""```
+          - Default password (armvirt): ```password```
 
     - name: Armvirt firmware packit
-      uses: signigelchan/openwrt-packit-actions@main
-      if: ${{ steps.organize.outputs.status }} == 'success' && env.ARMVIRT_PACKIT == 'true' && !cancelled()
+      uses: signigelchan/openwrt-packit-actions@packit
+      if: steps.organize.outputs.status == 'success' && env.ARMVIRT_PACKIT == 'true' && !cancelled()
       env:
-        OPENWRT_ARMVIRT: ${{ env.FIRMWARE_PATH }}/*.tar.gz
+        OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
         KERNEL_REPO_URL: "ophub/kernel"
         KERNEL_VERSION_NAME: ${{ inputs.packit_kernel_version }}
         KERNEL_AUTO_LATEST: ${{ inputs.packit_kernel_auto_latest }}
@@ -265,32 +273,44 @@ jobs:
         WHOAMI: "chanworks"
         OPENWRT_VER: "armvirt"
         DISTRIB_REVISION: "OpenWrt"
-        SW_FLOWOFFLOAD: ${{ env.ARMVIRT_SW_FLOWOFFLOAD }}
-        HW_FLOWOFFLOAD: ${{ env.ARMVIRT_HW_FLOWOFFLOAD }}
+        SW_FLOWOFFLOAD: ${{ env.ARMVIRT_SW_FLOW }}
+        HW_FLOWOFFLOAD: ${{ env.ARMVIRT_HW_FLOW }}
         SFE_FLOW: ${{ env.ARMVIRT_SFE_FLOW }}
         ENABLE_WIFI_K504: 1
         ENABLE_WIFI_K510: 1
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
     - name: Upload packit firmware to Actions
       uses: actions/upload-artifact@v3
       if: >
-        (!env.PACKAGED_STATUS || env.PACKAGED_STATUS == 'success') &&
-        env.ARMVIRT_PACKIT == 'true' && env.UPLOAD_ARMVIRT_ARTIFACTS == 'true' && !cancelled()
+        env.PACKAGED_STATUS == 'success' && env.ARMVIRT_PACKIT == 'true' &&
+        env.UPLOAD_ARMVIRT_ARTIFACTS == 'true' && !cancelled()
       with:
-        name: openwrt_${{ env.CONFIG_NAME }}_packit_${{ env.ARMVIRT_SOC }}_${{ env.BUILD_DATE }}
-        path: ${{ env.PACKAGED_OUTPUTPATH }}/*
+        name: openwrt_${{ env.CONFIG_NAME }}_packit_${{ env.ARMVIRT_SOC }}_${{ env.BUILT_DATE }}
+        path: ${{ env.PACKAGED_OUTPUTPATH }}/*.7z
 
     - name: Upload packit firmware to Releases
       uses: ncipollo/release-action@main
       if: >
-        (!env.PACKAGED_STATUS || env.PACKAGED_STATUS == 'success') &&
-        env.ARMVIRT_PACKIT == 'true' && env.UPLOAD_ARMVIRT_RELEASE == 'true' && !cancelled()
+        env.PACKAGED_STATUS == 'success' && env.ARMVIRT_PACKIT == 'true' &&
+        env.UPLOAD_ARMVIRT_RELEASE == 'true' && !cancelled()
       with:
-        tag: ${{ steps.compile.outputs.build_tag }}
-        name: openwrt_${{ env.CONFIG_NAME }}_packit_${{ env.ARMVIRT_SOC }}_${{ env.BUILD_DATE }}
-        artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
+        tag: ${{ steps.organize.outputs.build_tag }}
+        artifacts: |
+          ${{ env.PACKAGED_OUTPUTPATH }}/*.7z
+          ${{ env.PACKAGED_OUTPUTPATH }}/*.7z.sha
         allowUpdates: true
         removeArtifacts: false
         replacesArtifacts: true
         token: ${{ secrets.GH_TOKEN }}
+        body: |
+          ### OpenWrt Source information
+          - Source code: ```${{ env.REPO_URL }}```
+          - Branch: ```${{ env.REPO_BRANCH }}```
+
+          ### OpenWrt Firmware infomation
+          - Default IP: ```192.168.1.1```
+          - Default username: ```root```
+          - Default password: ```""```
+          - Default password (armvirt): ```password```
 
