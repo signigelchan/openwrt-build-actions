@@ -27,7 +27,7 @@ on:
       openwrt_repo:
         description: "Select openwrt repo"
         required: true
-        default: "immortalwrt/immortalwrt"
+        default: "coolsnowwolf/lede"
         type: choice
         options:
           - openwrt/openwrt
