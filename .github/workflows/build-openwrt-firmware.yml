@@ -30,13 +30,13 @@ on:
         default: "coolsnowwolf/lede"
         type: choice
         options:
-          - openwrt/openwrt
-          - immortalwrt/immortalwrt
           - coolsnowwolf/lede
+          - immortalwrt/immortalwrt
+          - openwrt/openwrt
       openwrt_branch:
-        description: "Set repo branch (!! THE ONE OF BELOW)"
+        description: "Set repo branch (! THE ONE OF BELOW !)"
         required: true
-        default: "openwrt-22.03;openwrt-21.02;master"
+        default: "master;openwrt-21.02;openwrt-22.03"
       packit_armvirt:
         description: "Armvirt firmware to packit ?"
         required: true
@@ -49,11 +49,11 @@ on:
       packit_kernel_version:
         description: "Set the packit ophub/kernel version"
         required: true
-        default: "5.10.176"
+        default: "5.15.120"
       packit_kernel_auto_latest:
         description: "Set whether to use latest kernel"
         required: false
-        default: false
+        default: true
         type: boolean
       packit_sw_flow:
         description: "Select whether to enable SW_FLOWOFFLOAD"
@@ -95,7 +95,7 @@ env:
   ARMVIRT_SFE_FLOW: ${{ inputs.packit_sfe_flow }}
   UPLOAD_ARMVIRT_ARTIFACTS: false
   UPLOAD_ARMVIRT_RELEASE: true
-  TZ: America/New_York
+  TZ: Asia/Singapore
 
 jobs:
   build:
