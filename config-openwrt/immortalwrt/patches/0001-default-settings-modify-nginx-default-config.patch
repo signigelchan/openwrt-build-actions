@@ -1,0 +1,29 @@
+From 8cb2b319639d5d02a2ffee88887a510297cf08ea Mon Sep 17 00:00:00 2001
+From: signigelchan <signigelchan@163.com>
+Date: Tue, 5 Sep 2023 23:20:23 +0800
+Subject: [PATCH] default-settings: modify nginx default config
+
+---
+ .../emortal/default-settings/files/99-default-settings    | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/package/emortal/default-settings/files/99-default-settings b/package/emortal/default-settings/files/99-default-settings
+index d13dfedb87..283434abc3 100755
+--- a/package/emortal/default-settings/files/99-default-settings
++++ b/package/emortal/default-settings/files/99-default-settings
+@@ -28,4 +28,12 @@ echo "log-facility=/dev/null" >> "/etc/dnsmasq.conf"
+ rm -rf "/tmp/luci-modulecache"
+ rm -f "/tmp/luci-indexcache"
+ 
++sed -i 's/listen '\''443 ssl default_server'\''/listen '\''4434 ssl default_server'\''/g' /etc/config/nginx
++sed -i 's/listen '\''\[::\]:443 ssl default_server'\''/listen '\''\[::\]:4434 ssl default_server'\''/g' /etc/config/nginx
++sed -i 's/listen '\''80'\''/listen '\''8081'\''/g' /etc/config/nginx
++sed -i 's/listen '\''\[::\]:80'\''/listen '\''\[::\]:8081'\''/g' /etc/config/nginx
++uci -q set nginx.global.uci_enable=false
++uci -q commit nginx
++rm -rf /tmp/luci-*
++
+ exit 0
+-- 
+2.34.1
+

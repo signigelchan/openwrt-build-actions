@@ -113,10 +113,12 @@ jobs:
           CONFIG_NAME=$(echo "${{ inputs.openwrt_repo }}" | sed 's/.*\///')
           BUILD_INFO=config-openwrt/${CONFIG_NAME}/buildinfo/${{ inputs.openwrt_device }}.config
           FEEDS_CONF=config-openwrt/${CONFIG_NAME}/feeds.conf.default
+          SPECIFIC_PATCHES=config-openwrt/${CONFIG_NAME}/patches
           CUSTOM_PART1_FEEDS=config-openwrt/${CONFIG_NAME}/custom-part1-feeds.sh
           CUSTOM_PART2_CONF=config-openwrt/${CONFIG_NAME}/custom-part2-conf.sh
           echo "BUILD_INFO=${BUILD_INFO}" >> ${GITHUB_ENV}
           echo "FEEDS_CONF=${FEEDS_CONF}" >> ${GITHUB_ENV}
+          echo "SPECIFIC_PATCHES=${SPECIFIC_PATCHES}" >> ${GITHUB_ENV}
           echo "CUSTOM_PART1_FEEDS=${CUSTOM_PART1_FEEDS}" >> ${GITHUB_ENV}
           echo "CUSTOM_PART2_CONF=${CUSTOM_PART2_CONF}" >> ${GITHUB_ENV}
           if [[ $CONFIG_NAME == "openwrt" ]]; then
@@ -156,16 +158,32 @@ jobs:
         ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
 
     - name: Patch supported source code
-      if: env.DEVICE_NAME == 'tplink_tl-wr720n-v4' && env.CUSTOM_PATCHES != '' && !cancelled()
       run: |
-        mv ${CUSTOM_PATCHES} openwrt/custom-patches
-        cd openwrt/
-        echo -e "dest patch root-dir: ${PWD}"
-        git config --global user.email "committer@github.com"
-        git config --global user.name "github committer"
-        git apply --stat custom-patches/*.patch
-        git apply --check custom-patches/*.patch
-        git am custom-patches/*.patch
+        mkdir -p openwrt/custom-patches
+        should_continue=false
+        if [[ -n "${CUSTOM_PATCHES}" && -n "$(ls -A ${CUSTOM_PATCHES})" ]]; then
+          ls -alh ${CUSTOM_PATCHES}
+          mv ${CUSTOM_PATCHES}/*.patch openwrt/custom-patches
+          should_continue=true
+        fi
+
+        if [[ -n "${SPECIFIC_PATCHES}" && -n "$(ls -A ${SPECIFIC_PATCHES})" ]]; then
+          ls -alh ${SPECIFIC_PATCHES}
+          mv ${SPECIFIC_PATCHES}/*.patch openwrt/custom-patches
+          should_continue=true
+        fi
+
+        if [ "${should_continue}" = true ]; then
+          cd openwrt/
+          echo -e "Dest patch root-dir: ${PWD}"
+          git config --global user.email "committer@github.com"
+          git config --global user.name "github committer"
+          git apply --stat custom-patches/*.patch
+          git apply --check custom-patches/*.patch
+          git am custom-patches/*.patch
+        else
+          echo -e "No patches need to apply."
+        fi
 
     - name: Load custom feeds
       run: |
