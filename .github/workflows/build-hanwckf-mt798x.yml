@@ -4,12 +4,10 @@
 #
 # Description: Build OpenWrt Firmware
 #
-# Source code repository: https://github.com/immortalwrt/immortalwrt | Branch: openwrt-21.02
-#                         https://github.com/coolsnowwolf/lede | Branch: master
-#                         https://github.com/openwrt/openwrt | Branch: openwrt-22.03
+# Source code repository: https://github.com/hanwckf/immortalwrt-mt798x | Branch: openwrt-21.02
 #=====================================================================================
 #
-name: build-openwrt-firmware
+name: build-hanwckf-mt798x
 
 on:
   #repository_dispatch:
@@ -18,85 +16,20 @@ on:
       openwrt_device:
         description: "Select device name"
         required: true
-        default: "tplink_tl-wr720n-v4"
+        default: "cmcc_rax3000m"
         type: choice
         options:
-          - tplink_tl-wr720n-v4
-          - d-team_newifi-d2
-          - armvirt-64
-          - x86-64
-          - p2w_r619ac-128m
-      openwrt_repo:
-        description: "Select openwrt repo"
-        required: true
-        default: "immortalwrt/immortalwrt"
-        type: choice
-        options:
-          - immortalwrt/immortalwrt
-          - coolsnowwolf/lede
-          - openwrt/openwrt
-      openwrt_branch:
-        description: "Set repo branch (! THE ONE OF BELOW !)"
-        required: true
-        default: "openwrt-21.02;master;openwrt-22.03"
-      packit_armvirt:
-        description: "Armvirt firmware to packit ?"
-        required: true
-        default: false
-        type: boolean
-      packit_soc:
-        description: "Set the packit device board"
-        required: true
-        default: "s905d"
-      packit_kernel_version:
-        description: "Set the packit ophub/kernel version"
-        required: true
-        default: "5.15.120"
-      packit_kernel_auto_latest:
-        description: "Set whether to use latest kernel"
-        required: false
-        default: true
-        type: boolean
-      packit_sw_flow:
-        description: "Select whether to enable SW_FLOWOFFLOAD"
-        required: false
-        default: '1'
-        type: choice
-        options:
-          - '0'
-          - '1'
-      packit_hw_flow:
-        description: "Select whether to enable HW_FLOWOFFLOAD"
-        required: false
-        default: '0'
-        type: choice
-        options:
-          - '0'
-          - '1'
-      packit_sfe_flow:
-        description: "Select whether to enable SFE_FLOW"
-        required: false
-        default: '1'
-        type: choice
-        options:
-          - '0'
-          - '1'
+          - cmcc_rax3000m
+        #  - h3c_nx30pro
 
 env:
-  REPO_URL: https://github.com/${{ inputs.openwrt_repo }}
-  REPO_BRANCH: ${{ inputs.openwrt_branch }}
+  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
+  REPO_BRANCH: openwrt-21.02
   DEVICE_NAME: ${{ inputs.openwrt_device }}
   CUSTOM_FILES: config-openwrt/custom-files
   CUSTOM_PATCHES: config-openwrt/custom-patches
   UPLOAD_ARTIFACTS: false
   UPLOAD_RELEASE: true
-  ARMVIRT_PACKIT: ${{ inputs.packit_armvirt }}
-  ARMVIRT_SOC: ${{ inputs.packit_soc }}
-  ARMVIRT_SW_FLOW: ${{ inputs.packit_sw_flow }}
-  ARMVIRT_HW_FLOW: ${{ inputs.packit_hw_flow }}
-  ARMVIRT_SFE_FLOW: ${{ inputs.packit_sfe_flow }}
-  UPLOAD_ARMVIRT_ARTIFACTS: false
-  UPLOAD_ARMVIRT_RELEASE: true
   TZ: Asia/Singapore
 
 jobs:
@@ -110,7 +43,7 @@ jobs:
 
     - name: Initialization environment variable
       run: |
-          CONFIG_NAME=$(echo "${{ inputs.openwrt_repo }}" | sed 's/.*\///')
+          CONFIG_NAME=$(echo "${REPO_URL}" | sed 's/.*\///')
           BUILD_INFO=config-openwrt/${CONFIG_NAME}/buildinfo/${{ inputs.openwrt_device }}.config
           FEEDS_CONF=config-openwrt/${CONFIG_NAME}/feeds.conf.default
           SPECIFIC_PATCHES=config-openwrt/${CONFIG_NAME}/patches
@@ -156,34 +89,6 @@ jobs:
         df -hT
         git clone -q --single-branch --depth 1 ${REPO_URL} -b ${REPO_BRANCH} openwrt
         ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
-
-    - name: Patch supported source code
-      run: |
-        mkdir -p openwrt/custom-patches
-        should_continue=false
-        if [[ -n "${CUSTOM_PATCHES}" && -n "$(ls -A ${CUSTOM_PATCHES})" ]]; then
-          ls -alh ${CUSTOM_PATCHES}
-          mv ${CUSTOM_PATCHES}/*.patch openwrt/custom-patches
-          should_continue=true
-        fi
-
-        if [[ -n "${SPECIFIC_PATCHES}" && -n "$(ls -A ${SPECIFIC_PATCHES})" ]]; then
-          ls -alh ${SPECIFIC_PATCHES}
-          mv ${SPECIFIC_PATCHES}/*.patch openwrt/custom-patches
-          should_continue=true
-        fi
-
-        if [ "${should_continue}" = true ]; then
-          cd openwrt/
-          echo -e "Dest patch root-dir: ${PWD}"
-          git config --global user.email "committer@github.com"
-          git config --global user.name "github committer"
-          git apply --stat custom-patches/*.patch
-          git apply --check custom-patches/*.patch
-          git am custom-patches/*.patch
-        else
-          echo -e "No patches need to apply."
-        fi
 
     - name: Load custom feeds
       run: |
@@ -278,59 +183,4 @@ jobs:
           - Default IP: ```192.168.1.1```
           - Default username: ```root```
           - Default password: ```""```
-          - Default password (armvirt): ```password```
-
-    - name: Armvirt firmware packit
-      uses: signigelchan/openwrt-packit-actions@packit
-      if: steps.organize.outputs.status == 'success' && env.ARMVIRT_PACKIT == 'true' && !cancelled()
-      env:
-        OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
-        KERNEL_REPO_URL: "ophub/kernel"
-        KERNEL_VERSION_NAME: ${{ inputs.packit_kernel_version }}
-        KERNEL_AUTO_LATEST: ${{ inputs.packit_kernel_auto_latest }}
-        PACKAGE_SOC: ${{ env.ARMVIRT_SOC }}
-        GZIP_IMGS: .7z
-        WHOAMI: "chanworks"
-        OPENWRT_VER: "armvirt"
-        DISTRIB_REVISION: "OpenWrt"
-        SW_FLOWOFFLOAD: ${{ env.ARMVIRT_SW_FLOW }}
-        HW_FLOWOFFLOAD: ${{ env.ARMVIRT_HW_FLOW }}
-        SFE_FLOW: ${{ env.ARMVIRT_SFE_FLOW }}
-        ENABLE_WIFI_K504: 1
-        ENABLE_WIFI_K510: 1
-        GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-    - name: Upload packit firmware to Actions
-      uses: actions/upload-artifact@v3
-      if: >
-        env.PACKAGED_STATUS == 'success' && env.ARMVIRT_PACKIT == 'true' &&
-        env.UPLOAD_ARMVIRT_ARTIFACTS == 'true' && !cancelled()
-      with:
-        name: openwrt_${{ env.CONFIG_NAME }}_packit_${{ env.ARMVIRT_SOC }}_${{ env.BUILT_DATE }}
-        path: ${{ env.PACKAGED_OUTPUTPATH }}/*.7z
-
-    - name: Upload packit firmware to Releases
-      uses: ncipollo/release-action@main
-      if: >
-        env.PACKAGED_STATUS == 'success' && env.ARMVIRT_PACKIT == 'true' &&
-        env.UPLOAD_ARMVIRT_RELEASE == 'true' && !cancelled()
-      with:
-        tag: ${{ steps.organize.outputs.build_tag }}
-        artifacts: |
-          ${{ env.PACKAGED_OUTPUTPATH }}/*.7z
-          ${{ env.PACKAGED_OUTPUTPATH }}/*.7z.sha
-        allowUpdates: true
-        removeArtifacts: false
-        replacesArtifacts: true
-        token: ${{ secrets.GH_TOKEN }}
-        body: |
-          ### OpenWrt Source information
-          - Source code: ```${{ env.REPO_URL }}```
-          - Branch: ```${{ env.REPO_BRANCH }}```
-
-          ### OpenWrt Firmware infomation
-          - Default IP: ```192.168.1.1```
-          - Default username: ```root```
-          - Default password: ```""```
-          - Default password (armvirt): ```password```
 
