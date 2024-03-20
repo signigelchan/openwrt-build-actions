@@ -23,9 +23,9 @@ on:
         options:
           - tplink_tl-wr720n-v4
           - d-team_newifi-d2
-          - armvirt-64
-          - x86-64
           - p2w_r619ac-128m
+          - x86-64
+          - armvirt-64
       openwrt_repo:
         description: "Select openwrt repo"
         required: true

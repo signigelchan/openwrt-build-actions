@@ -20,7 +20,7 @@ on:
         type: choice
         options:
           - cmcc_rax3000m
-        #  - h3c_nx30pro
+          - h3c_nx30pro
 
 env:
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
