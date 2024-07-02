@@ -4,7 +4,7 @@
 #
 # Description: Build OpenWrt Firmware
 #
-# Source code repository: https://github.com/immortalwrt/immortalwrt | Branch: openwrt-21.02
+# Source code repository: https://github.com/immortalwrt/immortalwrt | Branch: openwrt-23.05
 #                         https://github.com/coolsnowwolf/lede | Branch: master
 #                         https://github.com/openwrt/openwrt | Branch: openwrt-22.03
 #=====================================================================================
@@ -18,14 +18,14 @@ on:
       openwrt_device:
         description: "Select device name"
         required: true
-        default: "tplink_tl-wr720n-v4"
+        default: "armsr-armv8"
         type: choice
         options:
-          - tplink_tl-wr720n-v4
-          - d-team_newifi-d2
-          - p2w_r619ac-128m
+          - armsr-armv8
           - x86-64
-          - armvirt-64
+          - d-team_newifi-d2
+          - tplink_tl-wr720n-v4
+          - p2w_r619ac-128m
       openwrt_repo:
         description: "Select openwrt repo"
         required: true
@@ -38,7 +38,7 @@ on:
       openwrt_branch:
         description: "Set repo branch (! THE ONE OF BELOW !)"
         required: true
-        default: "openwrt-21.02;master;openwrt-22.03"
+        default: "openwrt-23.05;master;openwrt-22.03"
       packit_armvirt:
         description: "Armvirt firmware to packit ?"
         required: true
@@ -51,7 +51,7 @@ on:
       packit_kernel_version:
         description: "Set the packit ophub/kernel version"
         required: true
-        default: "5.15.120"
+        default: "5.15.158"
       packit_kernel_auto_latest:
         description: "Set whether to use latest kernel"
         required: false
@@ -76,7 +76,7 @@ on:
       packit_sfe_flow:
         description: "Select whether to enable SFE_FLOW"
         required: false
-        default: '1'
+        default: '0'
         type: choice
         options:
           - '0'
@@ -278,7 +278,7 @@ jobs:
           - Default IP: ```192.168.1.1```
           - Default username: ```root```
           - Default password: ```""```
-          - Default password (armvirt): ```password```
+          - Default password (armsr): ```password```
 
     - name: Armvirt firmware packit
       uses: signigelchan/openwrt-packit-actions@packit
@@ -291,7 +291,7 @@ jobs:
         PACKAGE_SOC: ${{ env.ARMVIRT_SOC }}
         GZIP_IMGS: .7z
         WHOAMI: "chanworks"
-        OPENWRT_VER: "armvirt"
+        OPENWRT_VER: "armsr"
         DISTRIB_REVISION: "OpenWrt"
         SW_FLOWOFFLOAD: ${{ env.ARMVIRT_SW_FLOW }}
         HW_FLOWOFFLOAD: ${{ env.ARMVIRT_HW_FLOW }}
@@ -332,5 +332,5 @@ jobs:
           - Default IP: ```192.168.1.1```
           - Default username: ```root```
           - Default password: ```""```
-          - Default password (armvirt): ```password```
+          - Default password (armsr): ```password```
 
