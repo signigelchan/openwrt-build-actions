@@ -20,6 +20,7 @@ on:
         type: choice
         options:
           - cmcc_rax3000m
+          - cmcc_rax3000m-emmc
           - h3c_nx30pro
 
 env:
