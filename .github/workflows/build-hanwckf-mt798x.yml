@@ -22,10 +22,15 @@ on:
           - cmcc_rax3000m
           - cmcc_rax3000m-emmc
           - h3c_nx30pro
+      commit_id:
+        description: "Set the specified commit id"
+        required: false
+        default: "main"
 
 env:
   REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x
   REPO_BRANCH: openwrt-21.02
+  BRANCH_COMMIT_ID: ${{ inputs.commit_id }}
   DEVICE_NAME: ${{ inputs.openwrt_device }}
   CUSTOM_FILES: config-openwrt/custom-files
   CUSTOM_PATCHES: config-openwrt/custom-patches
@@ -88,8 +93,15 @@ jobs:
         cat /etc/os-release
         free -m
         df -hT
-        git clone -q --single-branch --depth 1 ${REPO_URL} -b ${REPO_BRANCH} openwrt
+        git clone -q --single-branch ${REPO_URL} -b ${REPO_BRANCH} openwrt
         ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
+
+        if [[ $BRANCH_COMMIT_ID != "main" ]]; then
+          echo -e "Resetting the repository to ${BRANCH_COMMIT_ID}"
+          cd openwrt/
+          git reset --hard $BRANCH_COMMIT_ID
+          git log --pretty=oneline --max-count=5
+        fi
 
     - name: Load custom feeds
       run: |

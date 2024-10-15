@@ -39,6 +39,10 @@ on:
         description: "Set repo branch (! THE ONE OF BELOW !)"
         required: true
         default: "openwrt-23.05;master;openwrt-22.03"
+      commit_id:
+        description: "Set the specified commit id"
+        required: false
+        default: "main"
       packit_armvirt:
         description: "Armvirt firmware to packit ?"
         required: true
@@ -52,11 +56,6 @@ on:
         description: "Set the packit ophub/kernel version"
         required: true
         default: "5.15.158"
-      packit_kernel_auto_latest:
-        description: "Set whether to use latest kernel"
-        required: false
-        default: true
-        type: boolean
       packit_sw_flow:
         description: "Select whether to enable SW_FLOWOFFLOAD"
         required: false
@@ -85,6 +84,7 @@ on:
 env:
   REPO_URL: https://github.com/${{ inputs.openwrt_repo }}
   REPO_BRANCH: ${{ inputs.openwrt_branch }}
+  BRANCH_COMMIT_ID: ${{ inputs.commit_id }}
   DEVICE_NAME: ${{ inputs.openwrt_device }}
   CUSTOM_FILES: config-openwrt/custom-files
   CUSTOM_PATCHES: config-openwrt/custom-patches
@@ -154,8 +154,15 @@ jobs:
         cat /etc/os-release
         free -m
         df -hT
-        git clone -q --single-branch --depth 1 ${REPO_URL} -b ${REPO_BRANCH} openwrt
+        git clone -q --single-branch ${REPO_URL} -b ${REPO_BRANCH} openwrt
         ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
+
+        if [[ $BRANCH_COMMIT_ID != "main" ]]; then
+          echo -e "Resetting the repository to ${BRANCH_COMMIT_ID}"
+          cd openwrt/
+          git reset --hard $BRANCH_COMMIT_ID
+          git log --pretty=oneline --max-count=5
+        fi
 
     - name: Patch supported source code
       run: |
@@ -287,7 +294,7 @@ jobs:
         OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
         KERNEL_REPO_URL: "ophub/kernel"
         KERNEL_VERSION_NAME: ${{ inputs.packit_kernel_version }}
-        KERNEL_AUTO_LATEST: ${{ inputs.packit_kernel_auto_latest }}
+        KERNEL_AUTO_LATEST: false
         PACKAGE_SOC: ${{ env.ARMVIRT_SOC }}
         GZIP_IMGS: .7z
         WHOAMI: "chanworks"
